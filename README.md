@@ -3,9 +3,7 @@
 A very basic text editor in a familiar layout, written in Python with Qt 6.
 It uses your system's Qt, so it picks up the desktop theme (Breeze on KDE).
 
-<img width="930" height="718" alt="notewell3" src="https://github.com/user-attachments/assets/345c3ac4-4f9f-46fd-8b8e-7ee25d10acf9" />
-<img width="930" height="718" alt="notewell2" src="https://github.com/user-attachments/assets/37875ccc-9910-4a17-a521-fe198aff63e5" />
-<img width="930" height="718" alt="Notewell1" src="https://github.com/user-attachments/assets/1a398c3e-b689-4cec-8fd4-e6c03224f3df" />
+
 
 ## Running it
 
