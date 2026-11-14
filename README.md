@@ -2,6 +2,7 @@
 
 A very basic text editor in a familiar layout, written in Python with Qt 6.
 It uses your system's Qt, so it picks up the desktop theme (Breeze on KDE).
+
 [![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/notewell)
 
 <img  width="32%" alt="example1" src="https://github.com/user-attachments/assets/08502981-5a52-4288-ab33-50eed82fc211" />
