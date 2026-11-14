@@ -7,6 +7,8 @@ It uses your system's Qt, so it picks up the desktop theme (Breeze on KDE).
 <img  width="32%" alt="example2" src="https://github.com/user-attachments/assets/9eb9d40a-3dfa-4fe0-bc5f-e32f1662e496" />
 <img  width="32%" alt="example3" src="https://github.com/user-attachments/assets/ddc28c00-e199-440d-8310-63617265e97a" />
 
+[![Get it from the Snap Store](https://snapcraft.io/static/images/badges/en/snap-store-black.svg)](https://snapcraft.io/notewell)
+
 ## Running it
 
     sudo apt install python3-pyqt6
