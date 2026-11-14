@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Notewell
+GenericName=Text Editor
+Comment=A very basic text editor in a familiar layout
+Exec=notewell %f
+Icon=notewell
+Terminal=false
+Categories=Utility;TextEditor;
+MimeType=text/plain;
+Keywords=text;editor;notes;notepad;
+StartupWMClass=notewell
