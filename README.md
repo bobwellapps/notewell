@@ -10,8 +10,22 @@ It uses your system's Qt, so it picks up the desktop theme (Breeze on KDE).
 <img  width="32%" alt="example3" src="https://github.com/user-attachments/assets/ddc28c00-e199-440d-8310-63617265e97a" />
 
 
+## Download
 
-## Running it
+Grab the AppImage from the [latest release](https://github.com/bobwellapps/notewell/releases/latest),
+make it executable and run it:
+
+    chmod +x Notewell-*-x86_64.AppImage
+    ./Notewell-*-x86_64.AppImage
+
+You can also right-click the file, open Properties and tick "Allow executing
+file as program", then double-click it.
+
+It runs on most 64-bit Linux systems without installing anything else. If
+`python3-pyqt6` is installed, it uses your system's Qt and matches your
+desktop theme.
+
+## Running from source
 
     sudo apt install python3-pyqt6
     ./notewell.py [file]
