@@ -8,11 +8,14 @@
 # Software Foundation, either version 3 of the License, or (at your option)
 # any later version. See the LICENSE file for details.
 
+import getpass
+import html
 import os
+import pwd
 import sys
 
 try:
-    from PyQt6.QtCore import QDateTime, QLocale, QSettings, QSize
+    from PyQt6.QtCore import QDateTime, QLocale, QSettings, QSize, Qt
     from PyQt6.QtGui import (QAction, QFont, QFontDatabase, QIcon, QKeySequence,
                              QTextCursor, QTextDocument, QTextOption)
     from PyQt6.QtPrintSupport import QPageSetupDialog, QPrintDialog, QPrinter
@@ -25,7 +28,7 @@ except ImportError:
     sys.exit("PyQt6 is missing: sudo apt install python3-pyqt6")
 
 APP_NAME = "Notewell"
-VERSION = "1.1"
+VERSION = "1.2"
 FILE_FILTER = "Text Documents (*.txt);;All Files (*)"
 
 
@@ -38,6 +41,113 @@ def decode(data):
         return data.decode("utf-8")
     except UnicodeDecodeError:
         return data.decode("cp1252", errors="replace")
+
+
+def dropped_file(mime):
+    """The path of a single local file being dragged in, or None for anything else."""
+    urls = mime.urls()
+    if len(urls) == 1 and urls[0].isLocalFile():
+        return urls[0].toLocalFile()
+    return None
+
+
+def real_home():
+    # Inside a snap $HOME points into ~/snap/<name>/, so ask the system instead
+    try:
+        return pwd.getpwuid(os.getuid()).pw_dir
+    except KeyError:
+        return os.environ.get("SNAP_REAL_HOME") or os.path.expanduser("~")
+
+
+def shell_path(path):
+    """The path as it would be typed in a terminal, with ~ for the home folder."""
+    home = real_home().rstrip("/")
+    if path.startswith(home + "/"):
+        return '~/"' + path[len(home) + 1:] + '"'
+    return f'"{path}"'
+
+
+def copy_command(path):
+    """The name of a readable copy in the home folder, and the command that makes it."""
+    stem, ext = os.path.splitext(os.path.basename(path))
+    copy = f"{stem}-copy{ext}"
+    return copy, f'sudo cp {shell_path(path)} ~/"{copy}" && sudo chown $USER ~/"{copy}"'
+
+
+def owner_of(path):
+    try:
+        return pwd.getpwuid(os.stat(path).st_uid).pw_name
+    except (OSError, KeyError):
+        return None
+
+
+RELEASES_URL = "https://github.com/bobwellapps/notewell/releases/latest"
+APPIMAGE_TIP = ("The AppImage version of Notewell doesn't have these restrictions, so "
+                "you can use that instead. You can download it from:\n"
+                f"{RELEASES_URL}\n\n")
+SNAP_OPEN_LIMITS = ("Notewell is installed as a snap, and snaps aren't allowed to open "
+                    "hidden files (in folders whose names start with a dot), system files "
+                    "or files on other drives.\n\n" + APPIMAGE_TIP)
+SNAP_SAVE_LIMITS = ("Notewell is installed as a snap, and snaps aren't allowed to save "
+                    "files in hidden folders (names starting with a dot), system folders "
+                    "or on other drives.\n\n" + APPIMAGE_TIP)
+
+
+def permission_help(path, saving):
+    """Explain a "Permission denied" error and what the user can do about it."""
+    owner = owner_of(path)
+    someone_else = owner is not None and owner != getpass.getuser()
+    # In a snap, a file owned by another user (such as root) would be refused by
+    # the AppImage too, so only blame the snap when that isn't the reason.
+    in_snap = bool(os.environ.get("SNAP_NAME")) and not someone_else
+    belongs = f"It belongs to {owner}, and your" if someone_else else "Your"
+    if saving:
+        if in_snap:
+            return (SNAP_SAVE_LIMITS +
+                    "If you still want to use the snap, use File \u2192 Save As to "
+                    "save it somewhere in your home folder instead.")
+        if os.path.exists(path):
+            why = f"{belongs} account isn't allowed to change it."
+        else:
+            why = "Your account isn't allowed to save files in that folder."
+        return (f"{why}\n\nUse File \u2192 Save As to save it somewhere you can "
+                "write to, such as your home folder.")
+
+    copy, command = copy_command(path)
+    steps = (f"make a copy by running this in a terminal, then open {copy} from "
+             f"your home folder:\n\n{command}")
+    if in_snap:
+        return SNAP_OPEN_LIMITS + "If you still want to use the snap, " + steps
+    return (f"{belongs} account isn't allowed to read it. System files such as logs "
+            f"often need administrator rights.\n\nTo open it, {steps}")
+
+
+class TextArea(QPlainTextEdit):
+    """The editing area. Dragged text moves as usual; a dropped file is opened."""
+
+    def __init__(self, open_file):
+        super().__init__()
+        self.open_file = open_file
+
+    def dragEnterEvent(self, event):
+        if dropped_file(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event):
+        if dropped_file(event.mimeData()):
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dropEvent(self, event):
+        path = dropped_file(event.mimeData())
+        if path:
+            event.acceptProposedAction()
+            self.open_file(path)
+        else:
+            super().dropEvent(event)
 
 
 class FindDialog(QDialog):
@@ -144,11 +254,10 @@ class Notewell(QMainWindow):
         self.printer = None
         self.settings = QSettings("notewell", "notewell")
 
-        self.editor = QPlainTextEdit()
+        self.editor = TextArea(self.open_dropped)
         self.editor.setFrameShape(QPlainTextEdit.Shape.NoFrame)
-        self.editor.setAcceptDrops(False)  # dropped files go to the window instead
         self.setCentralWidget(self.editor)
-        self.setAcceptDrops(True)
+        self.setAcceptDrops(True)  # files dropped on the menu or status bar
 
         self.find_dialog = FindDialog(self, replace=False)
         self.replace_dialog = FindDialog(self, replace=True)
@@ -312,11 +421,31 @@ class Notewell(QMainWindow):
         except FileNotFoundError:
             text = ""  # "notewell new.txt" starts a new file with that name
         except OSError as e:
-            QMessageBox.warning(self, APP_NAME, f"Cannot open {path}\n\n{e.strerror}")
+            self.file_error("open", path, e)
             return
         self.crlf = "\r\n" in text
         self.path = path
         self.set_text(text.replace("\r\n", "\n").replace("\0", " "))
+
+    def file_error(self, action, path, error):
+        box = QMessageBox(QMessageBox.Icon.Warning, APP_NAME,
+                          f"Cannot {action} {path}\n\n{error.strerror}", parent=self)
+        if isinstance(error, PermissionError):
+            help_text = permission_help(path, saving=(action == "save"))
+            # shown as rich text so the download link can be clicked
+            rich = html.escape(help_text).replace("\n", "<br>")
+            link = html.escape(RELEASES_URL)
+            rich = rich.replace(link, f'<a href="{link}">{link}</a>')
+            box.setInformativeText(rich)
+        # let people select and copy the text (such as the command to run),
+        # and click the link
+        for label in box.findChildren(QLabel):
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+            label.setOpenExternalLinks(True)
+        info = box.findChild(QLabel, "qt_msgbox_informativelabel")
+        if info:
+            info.setTextFormat(Qt.TextFormat.RichText)
+        box.exec()
 
     def open_file(self):
         if not self.confirm_discard():
@@ -356,7 +485,7 @@ class Notewell(QMainWindow):
             with open(path, "w", encoding="utf-8", newline="") as f:
                 f.write(text)
         except OSError as e:
-            QMessageBox.warning(self, APP_NAME, f"Cannot save {path}\n\n{e.strerror}")
+            self.file_error("save", path, e)
             return False
         self.path = path
         self.editor.document().setModified(False)
@@ -465,14 +594,18 @@ class Notewell(QMainWindow):
         else:
             event.ignore()
 
+    def open_dropped(self, path):
+        if self.confirm_discard():
+            self.load(path)
+
     def dragEnterEvent(self, event):
-        urls = event.mimeData().urls()
-        if len(urls) == 1 and urls[0].isLocalFile():
+        if dropped_file(event.mimeData()):
             event.acceptProposedAction()
 
     def dropEvent(self, event):
-        if self.confirm_discard():
-            self.load(event.mimeData().urls()[0].toLocalFile())
+        path = dropped_file(event.mimeData())
+        if path:
+            self.open_dropped(path)
 
 
 def main():
@@ -489,9 +622,9 @@ def main():
         app.setWindowIcon(QIcon.fromTheme("notewell"))
 
     window = Notewell()
+    window.show()
     if len(sys.argv) > 1:
         window.load(sys.argv[1])
-    window.show()
     sys.exit(app.exec())
 
 
