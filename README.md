@@ -42,6 +42,7 @@ desktop theme.
 - Reads UTF-8, UTF-16 and ANSI files and saves as UTF-8, keeping Windows
   (CRLF) line endings if the file had them
 - Drag a file onto the window to open it
+- Drag selected text to move it within the document.
 - Remembers your font, word wrap, status bar and window size
 
 ## Licence
